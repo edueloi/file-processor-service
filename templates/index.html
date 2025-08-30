@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>File Processor Service — Demo</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="loader" class="loader-overlay" style="display: none;">
+        <div class="spinner"></div>
+    </div>
+
+    <header>
+        <div class="container topbar">
+            <h1>File Processor Service</h1>
+            <div class="status-tag">
+                <span id="statusDot" class="status-dot"></span>
+                <span id="statusText">desconectado</span>
+            </div>
+            <a class="manual-link" id="manualLink" href="#" target="_blank" rel="noopener">Abrir Manual ↗</a>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="card">
+            <h2>1. Gerar PDF Dinâmico</h2>
+            <div class="grid-2">
+                <div>
+                    <label for="payload">Payload JSON (DynamicPDF)</label>
+                    <textarea id="payload" spellcheck="false"></textarea>
+                    <div class="chips">
+                        <button class="chip" id="btnSnippetHeading">+ Título</button>
+                        <button class="chip" id="btnSnippetParagraph">+ Parágrafo</button>
+                        <button class="chip" id="btnSnippetBullets">+ Lista</button>
+                        <button class="chip" id="btnSnippetImage">+ Imagem</button>
+                        <button class="chip accent" id="btnLoadSample">Carregar Exemplo</button>
+                    </div>
+                </div>
+                <div class="actions-column">
+                    <button class="primary-btn" id="btnCreate">Gerar e Baixar PDF</button>
+                    <hr>
+                    <label for="imgFile">Converter imagem local para Base64</label>
+                    <div class="file-input-group">
+                        <input type="file" id="imgFile" accept="image/*" />
+                        <button id="btnToBase64">Converter</button>
+                    </div>
+                    <textarea id="b64Out" class="viewer small" placeholder="O código Base64 aparecerá aqui..."></textarea>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>2. Extrair Texto de Arquivos</h2>
+            <div class="grid-2">
+                <div>
+                    <label for="file">Arquivo (PDF, DOCX, XLSX, TXT)</label>
+                    <input id="file" type="file" />
+                    <div class="button-group">
+                        <button id="btnExtractJson">Extrair como JSON</button>
+                        <button id="btnExtractTxt">Baixar como .TXT</button>
+                    </div>
+                </div>
+                <div>
+                    <label>Resultado (JSON)</label>
+                    <pre id="out" class="viewer" placeholder="Aguardando extração..."></pre>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
