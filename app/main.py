@@ -3,23 +3,28 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import List, Dict, Union, Optional, Literal
-import io, os, re, base64, pathlib, requests
-import fitz  # PyMuPDF
+from typing import List, Dict, Union, Optional, Literal, Any
+import io, os, re, base64, pathlib
+import fitz 
 import docx
 import openpyxl
 from fpdf import FPDF
 from fpdf.errors import FPDFException
 from PIL import Image
 from urllib.parse import urlparse
+import requests
 
 try:
-    import markdown
+    import markdown 
 except Exception:
     markdown = None
 
+# ==============================================================================
+# Configs & Constantes
+# ==============================================================================
+
 SERVICE_TITLE = "File Processor Service API"
-SERVICE_VERSION = "6.3.4"
+SERVICE_VERSION = "6.3.9"
 SERVICE_DESCRIPTION = "Extrai texto (PDF/DOCX/XLSX/TXT) e gera PDFs dinâmicos com texto e imagens."
 
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -29,7 +34,12 @@ USER_AGENT = f"Mozilla/5.0 (FileProcessorService/{SERVICE_VERSION})"
 DISALLOWED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
 _MM_PER_PX = 25.4 / 96.0
 _BULLET_INDENT_MM = 4.0
-MANUAL_PATH = pathlib.Path("Manual-File-Processor-Service.md")
+
+MANUAL_PATH = pathlib.Path("comandos.html")
+
+# ==============================================================================
+# FastAPI
+# ==============================================================================
 
 app = FastAPI(title=SERVICE_TITLE, version=SERVICE_VERSION, description=SERVICE_DESCRIPTION)
 
@@ -41,8 +51,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ==============================================================================
+# Models (Pydantic v2)
+# ==============================================================================
+
 Align = Literal["L", "C", "R"]
-BlockType = Literal["heading", "subheading", "paragraph", "bullet_list", "key_value", "spacer", "image"]
+BlockType = Literal[
+    "heading","subheading","paragraph","bullet_list","key_value","spacer","image",
+    "form_input","form_checklist","form_radiogroup"
+]
 
 class ImageContent(BaseModel):
     src: Optional[str] = None
@@ -59,7 +76,7 @@ class ImageContent(BaseModel):
 
 class ContentBlock(BaseModel):
     type: BlockType
-    content: Union[str, List[str], Dict[str, str], int, ImageContent]
+    content: Union[str, List[str], int, ImageContent, Dict[str, Any]]
     style: Optional[Dict[str, Union[List[int], str]]] = None
     line_height: Optional[float] = None
     align: Optional[Align] = None
@@ -72,6 +89,16 @@ class ContentBlock(BaseModel):
             if (not isinstance(bg, list)) or len(bg) != 3 or any((not isinstance(x, int) or x < 0 or x > 255) for x in bg):
                 raise ValueError("background_color deve ser [R,G,B] com valores 0-255.")
         return v
+
+    @model_validator(mode="after")
+    def _coerce_image_content(self):
+        if self.type == "image" and isinstance(self.content, dict):
+            try:
+                self.content = ImageContent.model_validate(self.content)
+            except Exception:
+                pass
+        return self
+
 
 class PDFOptions(BaseModel):
     author: Optional[str] = None
@@ -97,6 +124,11 @@ class DynamicPDF(BaseModel):
     title: str
     content_blocks: List[ContentBlock]
     options: Optional[PDFOptions] = PDFOptions()
+    widgets: Optional[List[Dict[str, Any]]] = None
+
+# ==============================================================================
+# PDF class
+# ==============================================================================
 
 class PDFWithFooter(FPDF):
     def __init__(self, *args, page_numbers: bool = True, **kwargs):
@@ -113,6 +145,10 @@ class PDFWithFooter(FPDF):
             self.set_font("Arial", "", 8)
         self.set_text_color(128, 128, 128)
         self.cell(0, 10, f"Página {self.page_no()}", align="C")
+
+# ==============================================================================
+# Utils
+# ==============================================================================
 
 def _safe_text(s: str) -> str:
     if not s:
@@ -294,6 +330,26 @@ def _fetch_image_to_buffer(img: ImageContent, allow_remote: bool) -> io.BytesIO:
         buf.write(f.read())
     buf.seek(0); return buf
 
+def _mm_to_pt(mm: float) -> float:
+    return mm * 72.0 / 25.4
+
+def _draw_checkbox(pdf: FPDF, x: float, y: float, s: float, checked: bool):
+    pdf.rect(x, y, s, s)
+    if checked:
+        pdf.line(x+0.8, y+0.8, x+s-0.8, y+s-0.8)
+        pdf.line(x+s-0.8, y+0.8, x+0.8, y+s-0.8)
+
+def _draw_radio(pdf: FPDF, x: float, y: float, s: float, selected: bool):
+    pdf.ellipse(x, y, s, s)
+    if selected:
+        inner = s * 0.5
+        margin = (s-inner) / 2.0
+        pdf.ellipse(x+margin, y+margin, inner, inner, style="F")
+
+# ==============================================================================
+# Endpoints
+# ==============================================================================
+
 @app.get("/")
 def root():
     return {"status": "File Processor Service is running!", "version": SERVICE_VERSION}
@@ -359,6 +415,7 @@ async def create_dynamic_pdf(
         pdf.set_font(active_font, "B", 18)
         title_align = (doc.options.title_align if doc.options else "C")
         _ensure_space(pdf, 12)
+        pdf.set_x(pdf.l_margin)
         pdf.multi_cell(w=cw, h=10, txt=_safe_text(doc.title), align=title_align)
         pdf.ln(6)
 
@@ -372,31 +429,41 @@ async def create_dynamic_pdf(
             if block.type == "heading":
                 line_h = lh or 8.5; _ensure_space(pdf, line_h + 4)
                 pdf.set_font(active_font, "B", 14)
+                pdf.set_x(pdf.l_margin)
                 pdf.multi_cell(cw, line_h, _safe_text(str(block.content)), fill=fill)
-                y = pdf.get_y(); pdf.set_draw_color(200, 200, 200)
-                pdf.line(pdf.l_margin, y, pdf.l_margin + cw, y); pdf.ln(4)
+                y = pdf.get_y()
+                pdf.set_draw_color(200, 200, 200)
+                pdf.line(pdf.l_margin, y, pdf.l_margin + cw, y)
+                pdf.set_draw_color(0, 0, 0)
+                pdf.ln(4)
 
             elif block.type == "subheading":
                 line_h = lh or 7.0; _ensure_space(pdf, line_h + 2)
                 pdf.set_font(active_font, "B", 11)
-                pdf.multi_cell(cw, line_h, _safe_text(str(block.content)), fill=fill); pdf.ln(2)
+                pdf.set_x(pdf.l_margin)
+                pdf.multi_cell(cw, line_h, _safe_text(str(block.content)), fill=fill)
+                pdf.ln(2)
 
             elif block.type == "paragraph":
                 line_h = lh or 6.0
                 need = _estimate_text_height(pdf, cw, line_h, str(block.content)) + 2
                 _ensure_space(pdf, need)
                 pdf.set_font(active_font, "", 11)
+                pdf.set_x(pdf.l_margin)
                 align = (block.align or "L")
-                pdf.multi_cell(cw, line_h, _safe_text(str(block.content)), fill=fill, align=align); pdf.ln(2)
+                pdf.multi_cell(cw, line_h, _safe_text(str(block.content)), fill=fill, align=align)
+                pdf.ln(2)
 
             elif block.type == "bullet_list":
                 if not isinstance(block.content, list):
                     raise HTTPException(status_code=400, detail="bullet_list requer uma lista de strings.")
-                line_h = lh or 6.0; pdf.set_font(active_font, "", 11)
+                line_h = lh or 6.0
+                pdf.set_font(active_font, "", 11)
                 for item in block.content:
                     txt = _safe_text(str(item))
                     need = _estimate_text_height(pdf, cw - _BULLET_INDENT_MM, line_h, txt) + 1.5
                     _ensure_space(pdf, need)
+                    pdf.set_x(pdf.l_margin)
                     x_start = pdf.get_x()
                     pdf.cell(_BULLET_INDENT_MM, line_h, "•", align="L")
                     pdf.multi_cell(cw - _BULLET_INDENT_MM, line_h, txt, fill=fill)
@@ -411,43 +478,262 @@ async def create_dynamic_pdf(
                 need = _estimate_text_height(pdf, cw, line_h, info_line) + 3
                 _ensure_space(pdf, need)
                 pdf.set_font(active_font, "", 10)
-                pdf.multi_cell(cw, line_h, _safe_text(info_line), align="C", fill=fill); pdf.ln(3)
+                pdf.set_x(pdf.l_margin)
+                pdf.multi_cell(cw, line_h, _safe_text(info_line), align="C", fill=fill)
+                pdf.ln(3)
 
             elif block.type == "spacer":
                 if not isinstance(block.content, int):
                     raise HTTPException(status_code=400, detail="spacer requer inteiro (mm).")
-                _ensure_space(pdf, block.content); pdf.ln(block.content)
+                _ensure_space(pdf, block.content)
+                pdf.ln(block.content)
 
             elif block.type == "image":
-                if not isinstance(block.content, ImageContent):
-                    raise HTTPException(status_code=400, detail="image requer ImageContent.")
-                img = block.content
-                raw_buf = _fetch_image_to_buffer(img, allow_remote=doc.options.allow_remote_images if doc.options else True)
+                try:
+                    if isinstance(block.content, ImageContent):
+                        img = block.content
+                    elif isinstance(block.content, dict):
+                        img = ImageContent.model_validate(block.content)
+                    else:
+                        raise TypeError(f"tipo inválido em content: {type(block.content).__name__}")
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=f"image inválido: {e}")
+
+                raw_buf = _fetch_image_to_buffer(
+                    img,
+                    allow_remote=doc.options.allow_remote_images if doc.options else True
+                )
                 w_mm, h_mm = _image_dims_mm_from_buf(raw_buf)
                 png_buf = _to_png_buffer(raw_buf)
-                final_w = img.width; final_h = img.height
-                if not final_w and not final_h:
-                    final_w = min(cw, w_mm); final_h = h_mm * (final_w / w_mm)
-                elif not final_w:
-                    final_w = w_mm * (img.height / h_mm); final_h = img.height
-                elif not final_h:
-                    final_h = h_mm * (img.width / w_mm)
+                final_w = float(img.width) if img.width else None
+                final_h = float(img.height) if img.height else None
+
+                if final_w is None and final_h is None:
+                    final_w = min(cw, w_mm)
+                    final_h = h_mm * (final_w / w_mm)
+                elif final_w is None:
+                    final_w = w_mm * (final_h / h_mm)
+                elif final_h is None:
+                    final_h = h_mm * (final_w / w_mm)
+
                 if final_w > cw:
-                    scale = cw / final_w; final_w *= scale; final_h *= scale
+                    scale = cw / final_w
+                    final_w *= scale
+                    final_h *= scale
+
                 _ensure_space(pdf, final_h + 2)
                 x_pos = pdf.l_margin
-                if img.align == "C": x_pos += (cw - final_w) / 2
-                elif img.align == "R": x_pos += (cw - final_w)
+                if img.align == "C":
+                    x_pos += (cw - final_w) / 2
+                elif img.align == "R":
+                    x_pos += (cw - final_w)
+
                 pdf.image(png_buf, x=x_pos, w=final_w, h=final_h, type="PNG")
                 pdf.ln(final_h + 2)
 
-            if fill: pdf.set_fill_color(255, 255, 255)
+            elif block.type == "form_input":
+                if not isinstance(block.content, dict):
+                    raise HTTPException(status_code=400, detail="form_input requer dict.")
+                c = block.content
+                label    = str(c.get("label","")).strip()
+                width_mm = float(c.get("width_mm", _content_width(pdf)))
+                lines    = int(c.get("lines", 1))
+                boxed    = bool(c.get("boxed", False))
+                line_h   = lh or 7.0
+
+                _ensure_space(pdf, line_h + 4)
+                pdf.set_font(active_font, "B", 10)
+                pdf.set_x(pdf.l_margin)
+                pdf.multi_cell(cw, 5.5, _safe_text(label))
+                pdf.set_font(active_font, "", 10)
+
+                w = min(max(20.0, width_mm), cw)
+                h = 6.5 if lines == 1 else (6.5 * lines + 2)
+                _ensure_space(pdf, h + 4)
+
+                x = pdf.l_margin
+                y = pdf.get_y()
+
+                pdf.set_line_width(0.2)
+                pdf.set_draw_color(200, 200, 200)
+                if boxed or lines > 1:
+                    pdf.rect(x, y, w, h)
+                else:
+                    pdf.line(x, y + h, x + w, y + h)
+                pdf.set_draw_color(0, 0, 0)
+                pdf.ln(h + 4)
+
+            elif block.type == "form_checklist":
+                if not isinstance(block.content, dict):
+                    raise HTTPException(status_code=400, detail="form_checklist requer dict.")
+                c = block.content
+                label   = str(c.get("label","")).strip()
+                options = list(c.get("options", []))
+                checked = set()  
+                cols    = max(1, int(c.get("columns", 2)))
+                s       = float(c.get("box_size_mm", 4.0))
+                gap     = float(c.get("gap_mm", 2.0))
+                line_h  = lh or 6.5
+
+                if label:
+                    _ensure_space(pdf, 7.0)
+                    pdf.set_font(active_font, "B", 10)
+                    pdf.set_x(pdf.l_margin)
+                    pdf.multi_cell(cw, 5.5, _safe_text(label))
+                    pdf.set_font(active_font, "", 10)
+
+                col_w = cw / cols
+                i = 0
+                while i < len(options):
+                    _ensure_space(pdf, line_h + 2)
+                    row_y = pdf.get_y()
+                    pdf.set_x(pdf.l_margin)
+
+                    for col in range(cols):
+                        if i >= len(options):
+                            break
+                        opt = options[i]
+                        x = pdf.l_margin + col * col_w
+                        y = row_y
+                        y_box = y + (line_h - s) / 2.0
+                        _draw_checkbox(pdf, x, y_box, s, False)
+                        pdf.set_xy(x + s + gap, y)
+                        pdf.cell(col_w - (s + gap), line_h, _safe_text(str(opt)), border=0)
+                        i += 1
+
+                    pdf.set_y(row_y + line_h)
+                    pdf.set_x(pdf.l_margin)
+
+                pdf.ln(2)
+
+            elif block.type == "form_radiogroup":
+                if not isinstance(block.content, dict):
+                    raise HTTPException(status_code=400, detail="form_radiogroup requer dict.")
+                c = block.content
+                label    = str(c.get("label","")).strip()
+                options  = list(c.get("options", []))
+                selected = None 
+                cols     = max(1, int(c.get("columns", 2)))
+                s        = float(c.get("dot_size_mm", 4.0))
+                gap      = float(c.get("gap_mm", 2.0))
+                line_h   = lh or 6.5
+
+                if label:
+                    _ensure_space(pdf, 7.0)
+                    pdf.set_font(active_font, "B", 10)
+                    pdf.set_x(pdf.l_margin)
+                    pdf.multi_cell(cw, 5.5, _safe_text(label))
+                    pdf.set_font(active_font, "", 10)
+
+                col_w = cw / cols
+                i = 0
+                while i < len(options):
+                    _ensure_space(pdf, line_h + 2)
+                    row_y = pdf.get_y()
+                    pdf.set_x(pdf.l_margin)
+
+                    for col in range(cols):
+                        if i >= len(options):
+                            break
+                        opt = options[i]
+                        x = pdf.l_margin + col * col_w
+                        y = row_y
+                        y_dot = y + (line_h - s) / 2.0
+                        _draw_radio(pdf, x, y_dot, s, False)
+                        pdf.set_xy(x + s + gap, y)
+                        pdf.cell(col_w - (s + gap), line_h, _safe_text(str(opt)), border=0)
+                        i += 1
+
+                    pdf.set_y(row_y + line_h)
+                    pdf.set_x(pdf.l_margin)
+
+                pdf.ln(2)
+
+            if fill:
+                pdf.set_fill_color(255, 255, 255)
 
         pdf_bytes = _pdf_bytes(pdf)
+
+        widgets_supported = hasattr(fitz.Page, "add_widget")
+        widgets_injected = False
+
+        if doc.widgets and widgets_supported:
+            try:
+                def mm(v: float) -> float: return _mm_to_pt(float(v))
+                d = fitz.open(stream=pdf_bytes, filetype="pdf")
+                for w in doc.widgets:
+                    page_index = max(1, int(w.get("page", 1))) - 1
+                    if page_index >= len(d):
+                        continue
+                    page = d[page_index]
+
+                    x_mm = float(w.get("x_mm", 0))
+                    y_mm = float(w.get("y_mm", 0))
+                    w_mm = float(w.get("w_mm", 40))
+                    h_mm = float(w.get("h_mm", 8))
+                    rect = fitz.Rect(mm(x_mm), mm(y_mm), mm(x_mm + w_mm), mm(y_mm + h_mm))
+
+                    t = str(w.get("type", "text")).lower()
+                    fname = str(w.get("name", f"f_{id(w)}"))
+
+                    if t in ("text", "textarea"):
+                        widget = page.add_widget(
+                            rect=rect,
+                            field_name=fname,
+                            field_type=fitz.PDF_WIDGET_TYPE_TEXT,
+                            text=w.get("value", "") or "",
+                            font_size=float(w.get("font_size", 10))
+                        )
+                        if t == "textarea":
+                            widget.set_flags(fitz.PDF_WIDGET_FLAG_MULTILINE, True)
+                        if w.get("required"):
+                            widget.set_flags(fitz.PDF_WIDGET_FLAG_REQUIRED, True)
+
+                    elif t == "checkbox":
+                        widget = page.add_widget(
+                            rect=rect,
+                            field_name=fname,
+                            field_type=fitz.PDF_WIDGET_TYPE_CHECKBOX,
+                        )
+                        if w.get("checked"):
+                            widget.field_value = "Yes"
+
+                    elif t == "radio":
+                        widget = page.add_widget(
+                            rect=rect,
+                            field_name=fname,
+                            field_type=fitz.PDF_WIDGET_TYPE_RADIOBUTTON,
+                        )
+                        if "export_value" in w:
+                            widget.button_caption = str(w["export_value"])
+                        if w.get("selected"):
+                            widget.field_value = widget.button_caption or "On"
+
+                    elif t == "signature":
+                        page.add_widget(
+                            rect=rect,
+                            field_name=fname,
+                            field_type=fitz.PDF_WIDGET_TYPE_SIGNATURE
+                        )
+
+                pdf_bytes = d.tobytes()
+                widgets_injected = True
+            except Exception:
+                widgets_injected = False
+
         safe_filename = _safe_text(doc.filename).replace(" ", "_") + ".pdf"
         disp = "attachment" if download else "inline"
         headers_resp = {"Content-Disposition": f'{disp}; filename="{safe_filename}"'}
+
+        if doc.widgets:
+            if widgets_supported:
+                headers_resp["X-Widgets-Supported"] = "1"
+                headers_resp["X-Widgets-Injected"] = "1" if widgets_injected else "0"
+            else:
+                headers_resp["X-Widgets-Skipped"] = "1"
+
         return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf", headers=headers_resp)
+
     except HTTPException:
         raise
     except Exception as e:

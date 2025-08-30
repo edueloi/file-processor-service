@@ -1,74 +1,124 @@
 <!doctype html>
 <html lang="pt-br">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>File Processor Service — Demo</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>File Processor Service — App</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div id="loader" class="loader-overlay" style="display: none;">
-        <div class="spinner"></div>
+  <div id="loader" class="loader-overlay" style="display:none" role="status">
+    <div class="spinner"></div>
+  </div>
+
+  <header>
+    <div class="container topbar">
+      <h1>File Processor Service</h1>
+      <div class="status-tag">
+        <span id="statusDot" class="status-dot"></span>
+        <span id="statusText">desconectado</span>
+      </div>
+      <a class="manual-link" id="manualLink" href="#" target="_blank" rel="noopener">Manual ↗</a>
     </div>
+  </header>
 
-    <header>
-        <div class="container topbar">
-            <h1>File Processor Service</h1>
-            <div class="status-tag">
-                <span id="statusDot" class="status-dot"></span>
-                <span id="statusText">desconectado</span>
-            </div>
-            <a class="manual-link" id="manualLink" href="#" target="_blank" rel="noopener">Abrir Manual ↗</a>
+  <main class="container">
+    <section class="card">
+      <div class="section-head">
+        <h2>1. Gerador de PDF Dinâmico</h2>
+        <div class="toolbar">
+          <select id="sampleSelect" class="select" aria-label="Selecionar exemplo de payload">
+            <option value="ficha">Exemplo: Ficha de cadastro</option>
+            <option value="status">Exemplo: Status de projeto</option>
+            <option value="widgets">Exemplo: Formulário Interativo</option>
+          </select>
+          <button id="btnLoadSample" class="chip">Carregar Exemplo</button>
+          <button id="btnBeautify" class="chip">Formatar JSON</button>
+          <button id="btnValidate" class="chip">Validar JSON</button>
         </div>
-    </header>
+      </div>
+      
+      <div class="workspace">
+        <div class="grid-2">
+          <div>
+            <label for="payload">Payload JSON (Editor)</label>
+            <textarea id="payload" spellcheck="false" rows="15"></textarea>
 
-    <main class="container">
-        <section class="card">
-            <h2>1. Gerar PDF Dinâmico</h2>
-            <div class="grid-2">
-                <div>
-                    <label for="payload">Payload JSON (DynamicPDF)</label>
-                    <textarea id="payload" spellcheck="false"></textarea>
-                    <div class="chips">
-                        <button class="chip" id="btnSnippetHeading">+ Título</button>
-                        <button class="chip" id="btnSnippetParagraph">+ Parágrafo</button>
-                        <button class="chip" id="btnSnippetBullets">+ Lista</button>
-                        <button class="chip" id="btnSnippetImage">+ Imagem</button>
-                        <button class="chip accent" id="btnLoadSample">Carregar Exemplo</button>
-                    </div>
-                </div>
-                <div class="actions-column">
-                    <button class="primary-btn" id="btnCreate">Gerar e Baixar PDF</button>
-                    <hr>
-                    <label for="imgFile">Converter imagem local para Base64</label>
-                    <div class="file-input-group">
-                        <input type="file" id="imgFile" accept="image/*" />
-                        <button id="btnToBase64">Converter</button>
-                    </div>
-                    <textarea id="b64Out" class="viewer small" placeholder="O código Base64 aparecerá aqui..."></textarea>
-                </div>
+            <div id="snippets" class="chips">
+              <span class="chips-title">Adicionar Bloco:</span>
+              <button class="chip" data-snippet="heading">+ Título</button>
+              <button class="chip" data-snippet="subheading">+ Subtítulo</button>
+              <button class="chip" data-snippet="paragraph">+ Parágrafo</button>
+              <button class="chip" data-snippet="bullets">+ Lista</button>
+              <button class="chip" data-snippet="keyValue">+ Chave/Valor</button>
+              <button class="chip" data-snippet="spacer">+ Espaço</button>
+              <button class="chip" data-snippet="image">+ Imagem</button>
+              <button class="chip" data-snippet="input">+ Form Input</button>
+              <button class="chip" data-snippet="checklist">+ Checklist</button>
+              <button class="chip" data-snippet="radio">+ Rádio</button>
             </div>
-        </section>
+          </div>
 
-        <section class="card">
-            <h2>2. Extrair Texto de Arquivos</h2>
-            <div class="grid-2">
-                <div>
-                    <label for="file">Arquivo (PDF, DOCX, XLSX, TXT)</label>
-                    <input id="file" type="file" />
-                    <div class="button-group">
-                        <button id="btnExtractJson">Extrair como JSON</button>
-                        <button id="btnExtractTxt">Baixar como .TXT</button>
-                    </div>
-                </div>
-                <div>
-                    <label>Resultado (JSON)</label>
-                    <pre id="out" class="viewer" placeholder="Aguardando extração..."></pre>
-                </div>
+          <div class="actions-column">
+            <div class="action-group">
+              <label>Ações Principais</label>
+              <button class="primary-btn" id="btnCreate">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Gerar e Baixar PDF
+              </button>
+              <button class="primary-btn ghost" id="btnPreview">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Abrir no Navegador
+              </button>
             </div>
-        </section>
-    </main>
+            
+            <div class="action-group">
+              <label for="imgFile">Ferramenta: Imagem para Base64</label>
+              <div class="file-input-wrapper">
+                <input type="file" id="imgFile" accept="image/*" />
+                <label for="imgFile" class="file-input-label">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 15c.7-1.2 1-2.5.7-3.9-.6-2.4-2.4-4.2-4.8-4.8-.9-.2-1.8-.3-2.7 0-1.2.3-2.3.8-3.3 1.5-1 1-1.8 2-2.3 3.1-.6 1.3-.6 2.7 0 4s.9 2.4 2 3.2c1.2.8 2.5 1.1 3.8 1 .9-.1 1.8-.3 2.7-.7 1.1-.5 2.1-1.2 3-2.2.5-.5.9-1.1 1.2-1.8.2-.7.3-1.5.3-2.2 0-.2 0-.3 0-.4Z"/><path d="m7 11 3 3 4-4"/></svg>
+                  <span id="imgFileName">Escolher arquivo...</span>
+                </label>
+                <button id="btnToBase64">Converter</button>
+              </div>
+              <textarea id="b64Out" class="viewer small" placeholder="O Base64 aparecerá aqui..." readonly aria-label="Resultado da conversão para Base64"></textarea>
+              <div id="diag" class="diag" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <script src="/static/script.js"></script>
+    <section class="card">
+      <div class="section-head">
+        <h2>2. Extrair Texto de Arquivos</h2>
+      </div>
+      <div class="workspace">
+        <div class="grid-2">
+          <div>
+            <label for="file">Selecione o arquivo (.pdf, .docx, etc.)</label>
+            <div class="file-input-wrapper">
+              <input type="file" id="file" />
+              <label for="file" class="file-input-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                <span id="fileName">Escolher arquivo...</span>
+              </label>
+            </div>
+            <div class="button-group">
+              <button id="btnExtractJson">Extrair como JSON</button>
+              <button id="btnExtractTxt">Baixar como .TXT</button>
+            </div>
+          </div>
+          <div>
+            <label for="out">Resultado da Extração (JSON)</label>
+            <pre id="out" class="viewer" placeholder="Aguardando extração..."></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  
+  <script defer src="/static/script.js"></script>
 </body>
 </html>

@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>File Processor Service — Manual Completo</title>
+  <meta name="description" content="Manual completo da API File Processor Service (FastAPI) para extração de texto e geração de PDFs dinâmicos." />
+  <style>
+    :root{
+      --bg:#0f1420; --surface:#121a28; --panel:#162235;
+      --border:#26344b; --muted:#9cb0c9; --text:#e7edf3;
+      --primary:#3b82f6; --primary-600:#2563eb; --ok:#22c55e; --err:#ef4444;
+      --radius:14px; --shadow:0 10px 30px rgba(0,0,0,.25);
+      --mono:ui-monospace,Menlo,Consolas,monospace;
+    }
+    html{scroll-behavior:smooth}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:linear-gradient(180deg,#0e1420,#0c1320 40%, #0b1220);
+      color:var(--text); font:15px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    }
+    .container{max-width:1100px;margin:0 auto;padding:24px}
+    header{
+      position:sticky; top:0; z-index:10; backdrop-filter:saturate(140%) blur(6px);
+      background:rgba(18,26,40,.75); border-bottom:1px solid var(--border);
+    }
+    .topbar{display:flex;align-items:center;gap:16px;padding:14px 24px}
+    h1{font-size:20px;margin:0}
+    .status{margin-left:auto;display:flex;align-items:center;gap:10px}
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;
+      background:#1c2a40;border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--text)
+    }
+    .dot{width:10px;height:10px;border-radius:50%;background:#6b7280}
+    .dot.ok{background:var(--ok)} .dot.err{background:var(--err)}
+    .btn{
+      cursor:pointer;border:1px solid transparent;border-radius:10px;padding:10px 14px;font-weight:700;
+      background:var(--primary);color:#fff;transition:.2s;text-decoration:none;display:inline-flex;align-items:center;gap:8px
+    }
+    .btn:hover{background:var(--primary-600)}
+    .btn.ghost{background:transparent;border-color:var(--primary);color:var(--primary)}
+    main{padding:28px 0}
+    .card{
+      background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+      padding:22px; margin:18px 0; box-shadow:var(--shadow)
+    }
+    h2{margin:0 0 12px; font-size:20px; border-bottom: 1px solid var(--border); padding-bottom: 8px;}
+    h3{margin:16px 0 8px; font-size:16px; color: var(--primary);}
+    p{margin:10px 0}
+    ul{margin:8px 0 8px 20px; padding-left: 10px;}
+    li{margin-bottom: 6px;}
+    a{color:var(--primary); text-decoration: none;}
+    a:hover{text-decoration: underline;}
+    code,kbd{font-family:var(--mono)}
+    .grid{display:grid;gap:18px}
+    @media (min-width:900px){ .grid.cols-2{grid-template-columns:1fr 1fr} }
+    .kbd{display:inline-block;background:#233247;border:1px solid var(--border);padding:2px 6px;border-radius:6px; font-size: 0.9em;}
+    .muted{color:var(--muted)}
+    .cmd{
+      position:relative;background:#0d1624;border:1px solid var(--border);border-radius:12px;padding:12px 14px;
+      overflow:auto; margin-top: 10px;
+    }
+    .cmd pre{margin:0;white-space:pre-wrap; font-size: 14px; line-height: 1.5;}
+    .copy{
+      position:absolute;top:10px;right:10px;border:1px solid var(--border);background:#1b2a42;color:#dfe8f4;
+      padding:6px 10px;border-radius:8px;font-weight:700;cursor:pointer
+    }
+    .copy:hover{background:#223454}
+    .toast{position:fixed;top:20px;right:20px;padding:12px 18px;border-radius:10px;color:#fff;z-index:1000;
+      background:#334155;opacity:0;transform:translateX(120%);transition:.4s}
+    .toast.show{opacity:1;transform:translateX(0)}
+    .toast.ok{background:var(--ok)} .toast.err{background:var(--err)}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <h1>File Processor Service — Manual</h1>
+      <div class="status">
+        <span class="pill"><span id="dot" class="dot"></span><span id="stat">testando...</span></span>
+        <a class="btn ghost" href="/api/docs" title="Swagger UI">Swagger</a>
+        <a class="btn ghost" href="/" title="Abrir UI de demonstração">UI Demo</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    
+    <section class="card">
+      <p>
+        <strong>Resumo:</strong> Serviço HTTP em FastAPI para <strong>extrair texto</strong> de arquivos (PDF/DOCX/XLSX/TXT) e <strong>gerar PDFs dinâmicos</strong> com texto e imagens (local, remota ou Base64). Inclui paginação automática, bullets com recuo e validação forte para imagens.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>Índice</h2>
+      <ol>
+        <li><a href="#arquitetura">Arquitetura & Recursos</a></li>
+        <li><a href="#instalacao">Instalação & Execução</a></li>
+        <li><a href="#configuracoes">Configurações</a></li>
+        <li><a href="#endpoints">Endpoints</a></li>
+        <li><a href="#modelos">Modelos (Schemas)</a></li>
+        <li><a href="#exemplos">Exemplos de uso</a></li>
+        <li><a href="#erros">Tratamento de erros</a></li>
+        <li><a href="#boas-praticas">Boas práticas & Segurança</a></li>
+        <li><a href="#limites">Limites & Desempenho</a></li>
+        <li><a href="#changelog">Changelog</a></li>
+        <li><a href="#roadmap">Roadmap (ideias futuras)</a></li>
+      </ol>
+    </section>
+
+    <section class="card" id="arquitetura">
+      <h2>1. Arquitetura & Recursos</h2>
+      <ul>
+        <li><strong>FastAPI</strong> com <strong>Swagger UI</strong> em <span class="kbd">/docs</span> e OpenAPI em <span class="kbd">/openapi.json</span>.</li>
+        <li>Extração de texto: <strong>PDF</strong> (PyMuPDF), <strong>DOCX</strong> (python-docx), <strong>XLSX</strong> (openpyxl), <strong>TXT</strong>.</li>
+        <li>Geração de <strong>PDF dinâmico</strong> com fpdf2.
+          <ul>
+            <li>Título, headings/subheadings, parágrafos, listas com bullets, blocos <span class="kbd">key_value</span>, espaçadores e <strong>imagens</strong>.</li>
+            <li><strong>Quebra automática de página</strong> com cálculo de altura (<span class="kbd">ensure_space</span>).</li>
+            <li><strong>Rodapé com numeração</strong> opcional.</li>
+            <li>Suporte a <strong>DejaVuSans</strong> (Unicode). Fallback para Arial caso fontes não estejam presentes.</li>
+          </ul>
+        </li>
+        <li>Imagens: <strong>Base64</strong>, <strong>URL http(s)</strong> (com User-Agent + Referer) ou <strong>arquivo local</strong>.
+          <ul>
+            <li>Base64: aceita <strong>data URL</strong> (<span class="kbd">data:image/png;base64,...</span>), remove espaços, corrige padding e <strong>valida</strong> se o binário é uma imagem válida.</li>
+            <li>Remotas: bloqueio de SSRF a hosts internos (<span class="kbd">localhost</span>, <span class="kbd">127.0.0.1</span>, <span class="kbd">0.0.0.0</span>).</li>
+          </ul>
+        </li>
+        <li>CORS habilitado (configurável por variável de ambiente).</li>
+      </ul>
+    </section>
+
+    <section class="card" id="instalacao">
+      <h2>2. Instalação & Execução</h2>
+      <p><strong>Requisitos:</strong> Python 3.11+ recomendado.</p>
+      <p><strong>1.</strong> Crie um ambiente virtual e instale as dependências:</p>
+      <div class="cmd" id="cmd-install">
+        <button class="copy" data-copy="cmd-install">Copiar</button>
+<pre><code># Criar e ativar ambiente virtual
+python -m venv venv
+source venv/bin/activate  # No Windows: venv\Scripts\activate
+
+# Instalar dependências
+pip install -r requirements.txt</code></pre>
+      </div>
+
+      <p><strong>2.</strong> Execute o servidor:</p>
+      <div class="cmd" id="cmd-run">
+        <button class="copy" data-copy="cmd-run">Copiar</button>
+<pre><code>uvicorn app.main:app --reload --host 127.0.0.1 --port 8000</code></pre>
+      </div>
+
+      <p><strong>3.</strong> Acesse a documentação interativa em: <a href="http://127.0.0.1:8000/docs" target="_blank">http://127.0.0.1:8000/docs</a>.</p>
+      
+      <p class="muted">
+        <strong>Dica sobre Fontes (Opcional):</strong> Para melhor compatibilidade com caracteres especiais e emojis (Unicode), coloque os arquivos <span class="kbd">DejaVuSans.ttf</span> e <span class="kbd">DejaVuSans-Bold.ttf</span> na mesma pasta do seu <span class="kbd">app/main.py</span>. Caso contrário, o serviço usará a fonte Arial como padrão.
+      </p>
+    </section>
+
+    <section class="card" id="configuracoes">
+      <h2>3. Configurações</h2>
+      <ul>
+        <li><strong>CORS</strong>: Pode ser configurado pela variável de ambiente <span class="kbd">CORS_ALLOW_ORIGINS</span>. O padrão é <span class="kbd">*</span> (permitir tudo). Para múltiplos domínios, separe por vírgula: <span class="kbd">"https://site1.com,https://site2.com"</span>.</li>
+        <li><strong>Limites (definidos em código):</strong>
+          <ul>
+            <li><span class="kbd">MAX_UPLOAD_BYTES</span> = 20 MB para upload de arquivos.</li>
+            <li><span class="kbd">MAX_IMAGE_BYTES</span> = 15 MB por imagem na geração de PDF.</li>
+            <li><span class="kbd">HTTP_TIMEOUT_SECS</span> = 12 segundos para download de imagens remotas.</li>
+          </ul>
+        </li>
+        <li><strong>Proteção SSRF</strong>: URLs de imagens apontando para hosts internos (<span class="kbd">localhost</span>, <span class="kbd">127.0.0.1</span>, <span class="kbd">0.0.0.0</span>) são bloqueadas por segurança.</li>
+      </ul>
+    </section>
+    
+    <section class="card" id="endpoints">
+      <h2>4. Endpoints</h2>
+      
+      <h3>GET /api/</h3>
+      <p>Retorna o status e a versão atual do serviço. Útil para health checks.</p>
+      
+      <h3>POST /api/process-file</h3>
+      <p>Recebe um arquivo via <span class="kbd">multipart/form-data</span> e devolve o texto extraído.</p>
+      <ul>
+        <li><strong>Query Params:</strong>
+          <ul>
+            <li><span class="kbd">return_as</span>: <span class="kbd">"json"</span> (padrão) ou <span class="kbd">"txt"</span>.</li>
+            <li><span class="kbd">download</span>: <span class="kbd">true</span> ou <span class="kbd">false</span> (só para <span class="kbd">return_as=txt</span>).</li>
+          </ul>
+        </li>
+        <li><strong>Body:</strong> Campo <span class="kbd">file</span> com o arquivo (<span class="kbd">.pdf</span>, <span class="kbd">.docx</span>, <span class="kbd">.xlsx</span>, <span class="kbd">.txt</span>).</li>
+      </ul>
+      <div class="cmd" id="cmd-curl-process">
+        <button class="copy" data-copy="cmd-curl-process">Copiar</button>
+<pre><code>curl -X POST "http://127.0.0.1:8000/api/process-file" \
+  -F "file=@/caminho/para/seu/arquivo.pdf"</code></pre>
+      </div>
+
+      <h3>POST /api/create-pdf</h3>
+      <p>Gera um PDF a partir de uma estrutura de dados JSON enviada no corpo da requisição.</p>
+      <ul>
+        <li><strong>Query Params:</strong>
+          <ul>
+            <li><span class="kbd">download</span>: <span class="kbd">true</span> (padrão) para baixar o arquivo, ou <span class="kbd">false</span> para abrir no navegador.</li>
+          </ul>
+        </li>
+        <li><strong>Body:</strong> Um objeto JSON seguindo o schema <a href="#dynamicpdf">DynamicPDF</a>.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="modelos">
+      <h2>5. Modelos (Schemas)</h2>
+      
+      <h3 id="imagecontent">ImageContent</h3>
+      <p>Define uma imagem a ser inserida no PDF.</p>
+      <div class="cmd" id="cmd-schema-img">
+        <button class="copy" data-copy="cmd-schema-img">Copiar</button>
+<pre><code>{
+  "src": "https://dominio/imagem.png",
+  "base64_data": "data:image/png;base64,....",
+  "width": 120,
+  "height": 60,
+  "align": "C"
+}</code></pre>
+      </div>
+      
+      <h3 id="contentblock">ContentBlock</h3>
+      <p>Um bloco de conteúdo genérico.</p>
+      <div class="cmd" id="cmd-schema-block">
+        <button class="copy" data-copy="cmd-schema-block">Copiar</button>
+<pre><code>{
+  "type": "heading",
+  "content": "Título do Bloco",
+  "style": { "background_color": [245, 245, 245] },
+  "line_height": 8.0,
+  "align": "L"
+}</code></pre>
+      </div>
+
+      <h3 id="pdfoptions">PDFOptions</h3>
+      <p>Opções de configuração para o documento PDF.</p>
+      <div class="cmd" id="cmd-schema-opts">
+        <button class="copy" data-copy="cmd-schema-opts">Copiar</button>
+<pre><code>{
+  "author": "Autor",
+  "subject": "Assunto do PDF",
+  "keywords": "pdf, api, fast",
+  "margins_mm": [15, 15, 15],
+  "page_numbers": true,
+  "title_align": "C",
+  "theme_text_color": [0, 0, 0],
+  "allow_remote_images": true
+}</code></pre>
+      </div>
+
+      <h3 id="dynamicpdf">DynamicPDF (Principal)</h3>
+      <p>O objeto principal que define todo o documento a ser gerado.</p>
+      <div class="cmd" id="cmd-schema-main">
+        <button class="copy" data-copy="cmd-schema-main">Copiar</button>
+<pre><code>{
+  "filename": "meu-documento",
+  "title": "Título Principal do Documento",
+  "content_blocks": [ /* Array de ContentBlock */ ],
+  "options": { /* Objeto PDFOptions */ }
+}</code></pre>
+      </div>
+    </section>
+
+    <section class="card" id="exemplos">
+      <h2>6. Exemplos de uso</h2>
+
+      <h3>Relatório com Imagem Base64</h3>
+      <div class="cmd" id="cmd-ex-base64">
+        <button class="copy" data-copy="cmd-ex-base64">Copiar</button>
+<pre><code>{
+  "filename": "relatorio_agosto",
+  "title": "Relatório de Atividades - Agosto",
+  "options": { "author": "Minha Empresa", "page_numbers": true },
+  "content_blocks": [
+    { "type": "heading", "content": "1. Visão Geral" },
+    { "type": "paragraph", "content": "Este relatório apresenta os principais indicadores e entregas do mês." },
+    { "type": "image",
+      "content": {
+        "base64_data": "iVBORw0KGgoAAAANSUhEUgAAAGQAAABGCAYAAACCrvpDAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACOSURBVHhe7dNBCgAgEMDAL5T+e148I24kQIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIi...
+    { "type": "bullet_list", "content": ["Feature X entregue", "Integração Y publicada", "Correções críticas resolvidas"] },
+    { "type": "key_value", "content": { "Projetos": "5", "Entregas": "12", "Erros críticos": "0" } }
+  ]
+}</code></pre>
+      </div>
+
+      <h3>cURL para Gerar PDF</h3>
+      <div class="cmd" id="cmd-ex-curl">
+        <button class="copy" data-copy="cmd-ex-curl">Copiar</button>
+<pre><code>curl -X POST "http://127.0.0.1:8000/api/create-pdf" \
+  -H "Content-Type: application/json" \
+  -d @caminho/para/seu/payload.json \
+  --output saida.pdf</code></pre>
+      </div>
+
+      <h3>JavaScript (fetch) para Gerar PDF</h3>
+      <div class="cmd" id="cmd-ex-fetch">
+        <button class="copy" data-copy="cmd-ex-fetch">Copiar</button>
+<pre><code>const payload = {
+  "filename": "meu-pdf-js",
+  "title": "Gerado via JavaScript",
+  "content_blocks": [{"type": "paragraph", "content": "Olá, Mundo!"}]
+};
+
+fetch("http://127.0.0.1:8000/api/create-pdf", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload)
+})
+.then(res => {
+  if (!res.ok) throw new Error('Falha na requisição');
+  return res.blob();
+})
+.then(blob => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = payload.filename + ".pdf";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+})
+.catch(console.error);</code></pre>
+      </div>
+    </section>
+    
+    <section class="card" id="erros">
+        <h2>7. Tratamento de erros</h2>
+        <ul>
+            <li><span class="kbd">400</span>: Requisição inválida. Motivos comuns: Base64 mal formatado, imagem remota bloqueada (403), tipo de arquivo não suportado.</li>
+            <li><span class="kbd">413</span>: Tamanho excedido. O arquivo enviado ou uma das imagens no JSON é maior que o limite configurado.</li>
+            <li><span class="kbd">422</span>: Erro de validação. O JSON enviado não corresponde ao schema esperado (ex: falta um campo obrigatório como <span class="kbd">filename</span>).</li>
+            <li><span class="kbd">500</span>: Erro interno no servidor. Algo inesperado aconteceu durante a geração do PDF. Verifique os logs do servidor para mais detalhes.</li>
+        </ul>
+    </section>
+    
+    <section class="card" id="boas-praticas">
+        <h2>8. Boas práticas & Segurança</h2>
+        <ul>
+            <li><strong>Segurança (SSRF)</strong>: O serviço já bloqueia o download de imagens de URLs internas (<span class="kbd">localhost</span>, etc.) para prevenir ataques de Server-Side Request Forgery.</li>
+            <li><strong>Fontes</strong>: Para garantir que todos os caracteres (acentos, símbolos) sejam exibidos corretamente, forneça as fontes DejaVu.</li>
+            <li><strong>Imagens Grandes</strong>: Sempre que possível, especifique uma <span class="kbd">width</span> (largura) para as imagens, para garantir que elas caibam na página. O serviço calculará a altura proporcionalmente.</li>
+            <li><strong>Base64</strong>: Para evitar problemas, envie a string Base64 sem quebras de linha e dentro do corpo JSON, não como parâmetro de URL.</li>
+        </ul>
+    </section>
+
+    <section class="card" id="limites">
+        <h2>9. Limites & Desempenho</h2>
+        <ul>
+            <li>O PDF é gerado totalmente em memória e transmitido (streaming) para o cliente, o que é eficiente para arquivos de tamanho moderado.</li>
+            <li>O processamento é síncrono. Para um volume muito alto de requisições simultâneas, considere usar uma fila de tarefas (como Celery ou RQ) para processar os pedidos em segundo plano.</li>
+        </ul>
+    </section>
+    
+    <section class="card" id="changelog">
+        <h2>10. Changelog (v6.3.3)</h2>
+        <ul>
+            <li>Decoder Base64 agora é mais tolerante (aceita data URL, espaços, padding incorreto) e valida se os dados realmente correspondem a uma imagem.</li>
+            <li>Melhoria no recuo e quebra de linha de listas com bullets.</li>
+            <li>Adicionado <span class="kbd">ensure_space()</span> para evitar que o conteúdo invada a margem inferior ou o rodapé.</li>
+            <li>Migração para Pydantic v2 e melhor tratamento de erros de imagens remotas.</li>
+        </ul>
+    </section>
+    
+    <section class="card" id="roadmap">
+        <h2>11. Roadmap (ideias futuras)</h2>
+        <ul>
+            <li>Bloco de <span class="kbd">table</span> para criar tabelas.</li>
+            <li>Bloco <span class="kbd">divider</span> para desenhar linhas horizontais.</li>
+            <li>Cabeçalho e rodapé customizáveis por página.</li>
+            <li>Suporte a marca d'água (watermark).</li>
+            <li>Suporte a outros tamanhos de página (ex: A4 Paisagem).</li>
+        </ul>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // ---- Toast (notificações)
+    const toastEl = document.getElementById('toast');
+    function toast(msg, cls){ 
+      toastEl.textContent = msg; 
+      toastEl.className = 'toast ' + (cls || '');
+      requestAnimationFrame(()=>{ toastEl.classList.add('show'); });
+      setTimeout(()=>{ toastEl.classList.remove('show'); }, 3200);
+    }
+
+    // ---- Botões de copiar
+    document.querySelectorAll('.copy').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.getAttribute('data-copy');
+        const box = document.getElementById(id);
+        if (!box) return;
+        
+        // Extrai o texto do elemento <pre><code> dentro do container
+        const pre = box.querySelector('pre');
+        const text = pre ? pre.innerText : '';
+
+        if(text) {
+          navigator.clipboard.writeText(text)
+            .then(() => toast('Copiado!', 'ok'))
+            .catch(() => toast('Falha ao copiar', 'err'));
+        }
+      });
+    });
+
+    // ---- Status da API
+    const dot = document.getElementById('dot');
+    const stat = document.getElementById('stat');
+    fetch('/api/')
+      .then(async r => {
+        if(!r.ok) throw new Error(r.statusText);
+        const j = await r.json();
+        dot.classList.add('ok');
+        stat.textContent = 'online — v' + (j.version || 'N/D');
+      })
+      .catch(() => {
+        dot.classList.add('err');
+        stat.textContent = 'offline';
+      });
+  </script>
+</body>a
+</html>
