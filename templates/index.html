@@ -2,123 +2,547 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>File Processor Service — App</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>File Processor Service — App (System Look)</title>
+  <style>
+
+  :root{
+    --bg-page:#0b1019; --bg-grad-1:#0f1420; --bg-grad-2:#0c1320;
+    --panel:#111a28; --panel-alt:#0d1725; --panel-ghost:#0b1220; --workspace:#0f1624;
+    --border-soft:#22324a; --border:#2a3a55; --border-strong:#3a4a6b;
+    --text:#eaf1f8; --muted:#9fb2cc; --primary:#3b82f6; --primary-600:#2563eb;
+    --success:#22c55e; --error:#ef4444; --warning:#f59e0b;
+    --radius:12px; --radius-inner:10px; --shadow-1:0 8px 24px rgba(0,0,0,.25);
+    --shadow-glow:0 0 32px rgba(59,130,246,.12); --ring:0 0 0 2px rgba(59,130,246,.28);
+    --transition-speed:.18s; --sidebar-w:260px; --content-max:1200px;
+    --control-h:38px; --control-h-sm:34px; --control-h-xs:30px;
+  }
+
+  @media (prefers-reduced-motion:no-preference){
+    @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes pulse{from{transform:scale(.5);opacity:.35}to{transform:scale(1.25);opacity:0}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; color:var(--text); font:14.5px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    background-color:var(--bg-page);
+    background-image:
+      radial-gradient(at 20% -10%, #12243b55, transparent 60%),
+      radial-gradient(at 100% 0, #1a2f4a40, transparent 60%),
+      linear-gradient(180deg, var(--bg-grad-1), var(--bg-grad-2));
+  }
+  a{color:var(--primary);text-decoration:none} a:hover{text-decoration:underline}
+
+  .app{display:grid; grid-template-columns:var(--sidebar-w) 1fr; min-height:100svh}
+  .topbar{grid-column:1/-1; position:sticky; top:0; z-index:20; background:rgba(11,17,28,.75); backdrop-filter:saturate(140%) blur(8px); border-bottom:1px solid var(--border)}
+  .topbar-inner{display:flex; align-items:center; gap:12px; padding:10px 16px; max-width:calc(var(--content-max) + var(--sidebar-w)); margin:0 auto}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:800}
+  .brand .logo{width:26px; height:26px; display:grid; place-items:center; border-radius:8px; background:linear-gradient(135deg,var(--primary),#60a5fa); box-shadow:var(--shadow-glow)}
+  .topbar-actions{margin-left:auto; display:flex; gap:10px; align-items:center}
+  .status-tag{display:inline-flex; align-items:center; gap:8px; padding:5px 10px; border-radius:999px; background:#1a2537; border:1px solid var(--border); font-size:12px; font-weight:700; color:var(--muted)}
+  .status-dot{width:9px; height:9px; border-radius:50%; background:#6b7280; position:relative}
+  .status-dot.ok{background:var(--success)} .status-dot.err{background:var(--error)}
+  .status-dot.ok::after,.status-dot.err::after{content:""; position:absolute; inset:-6px; border-radius:50%; border:2px solid currentColor; opacity:.25; animation:pulse 1.6s ease-out infinite}
+  .sidebar{position:sticky; top:48px; align-self:start; height:calc(100svh - 48px); border-right:1px solid var(--border); background:linear-gradient(180deg,#0e1522,#0a121e); padding:14px}
+  .nav{display:flex; flex-direction:column; gap:6px}
+  .nav h3{margin:8px 8px 6px; font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted)}
+  .nav a{display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; color:var(--text); border:1px solid transparent; font-weight:600; font-size:13.5px}
+  .nav a:hover{background:#142033; border-color:var(--border)} .nav a.active{background:#16263f; border-color:var(--border-strong)}
+  .kbd{font:600 11px/1 ui-monospace,Menlo,Consolas,monospace; background:#1a2740; border:1px solid var(--border); padding:3px 6px; border-radius:6px; color:var(--muted)}
+  .content{max-width:var(--content-max); width:100%; margin:0 auto; padding:18px}
+  .card{border:1px solid var(--border-soft); border-radius:var(--radius); background:var(--panel); padding:16px; box-shadow:var(--shadow-1); animation:fadeIn .3s var(--transition-speed) ease-out both; margin-bottom:18px}
+  .section-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px}
+  h2{margin:0; font-size:18px; font-weight:800}
+  .sub{color:var(--muted); font-size:12.5px}
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start}
+  .workspace{background:var(--workspace); border:1px solid var(--border); border-radius:var(--radius-inner); padding:14px}
+  label{display:block; margin-bottom:6px; font-weight:700; color:var(--muted); font-size:12.5px}
+  textarea,select,input[type="text"],pre.viewer{
+    width:100%; height:auto; min-height:var(--control-h); padding:9px 12px; border-radius:10px; background:var(--panel-ghost); border:1px solid var(--border); color:var(--text); font-size:13.5px; transition:border-color var(--transition-speed), box-shadow var(--transition-speed)
+  }
+  textarea{resize:vertical; min-height:140px; font-family:ui-monospace,Menlo,Consolas,monospace}
+  textarea:focus,select:focus,input[type="text"]:focus,pre.viewer:focus{outline:none; border-color:var(--primary-600); box-shadow:var(--ring)}
+  pre.viewer{min-height:140px; white-space:pre-wrap; overflow:auto}
+  pre.viewer:empty::before{content:attr(placeholder); color:var(--muted)}
+  .btn,button,.chip{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    height:var(--control-h); padding:0 12px; border-radius:10px; border:1px solid var(--border-strong);
+    cursor:pointer; font-weight:700; font-size:13.5px; color:var(--text); background:#1b2940;
+    transition:transform var(--transition-speed), box-shadow var(--transition-speed), background var(--transition-speed), border-color var(--transition-speed)
+  }
+  .btn:hover,button:hover,.chip:hover{background:#243552; transform:translateY(-1px); box-shadow:var(--shadow-1)}
+  .btn:active,button:active,.chip:active{transform:translateY(0) scale(.98); background:#162232}
+  .btn-primary{background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:0 3px 10px rgba(59,130,246,.18)}
+  .btn-primary:hover{background:var(--primary-600); border-color:var(--primary-600)}
+  .btn-ghost{background:transparent; border-color:var(--primary); color:var(--primary)} .btn-ghost:hover{background:rgba(59,130,246,.1)}
+  .btn-sm{height:var(--control-h-sm); padding:0 10px; font-size:12.5px; border-radius:9px}
+  .chip{height:var(--control-h-xs); padding:0 10px; font-size:12.5px; background:#1a2740}
+  .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
+  .chips-title{font-weight:800; color:var(--muted); align-self:center; margin-right:4px; font-size:12.5px}
+  .button-group{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap}
+  .button-group .btn,.button-group button{height:var(--control-h-sm); padding:0 12px; font-size:12.5px}
+  .file-input-wrapper{display:flex; align-items:stretch; width:100%}
+  .file-input-wrapper input[type="file"]{display:none}
+  .file-input-label{display:inline-flex; align-items:center; gap:8px; height:var(--control-h); padding:0 12px; background:#1b2940; border:1px solid var(--border-strong); border-right:0; border-radius:10px 0 0 10px; cursor:pointer; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0}
+  .file-input-label:hover{background:#243552}
+  .file-input-label span{max-width:240px; overflow:hidden; text-overflow:ellipsis}
+  .file-input-wrapper > button{border-left:0; border-radius:0 10px 10px 0}
+  .btnExtractTxtStyle {border-left: 0; margin-left: 5px; border-radius: 10px !important;}
+  .dropzone{border:1px dashed var(--border-strong); border-radius:10px; padding:12px; display:grid; place-items:center; text-align:center; color:var(--muted); transition:border-color var(--transition-speed), background var(--transition-speed)}
+  .dropzone.dragover{background:#0f1a2a; border-color:var(--primary)}
+  .loader-overlay{position:fixed; inset:0; display:none; justify-content:center; align-items:center; z-index:999; background:rgba(0,0,0,.6); backdrop-filter:blur(2px)}
+  .spinner{width:50px; height:50px; border-radius:50%; border:5px solid #2a3750; border-top-color:var(--primary); animation:spin 1s linear infinite}
+  .toast{position:fixed; top:18px; right:18px; padding:10px 16px; border-radius:10px; color:#fff; font-weight:800; z-index:1000; transition:all .5s; transform:translateX(120%); opacity:0}
+  .toast.show{transform:translateX(0); opacity:1}
+  .toast.success{background:var(--success)} .toast.error{background:var(--error)} .toast.info{background:#337ab7}
+
+  @media (max-width:1024px){.grid-2{grid-template-columns:1fr}}
+  @media (max-width:860px){.app{grid-template-columns:1fr} .sidebar{position:static; height:auto}}
+</style>
 </head>
 <body>
-  <div id="loader" class="loader-overlay" style="display:none" role="status">
-    <div class="spinner"></div>
+  <div id="loader" class="loader-overlay" role="status" aria-live="polite" aria-label="Carregando">
+    <div class="spinner" aria-hidden="true"></div>
   </div>
 
-  <header>
-    <div class="container topbar">
-      <h1>File Processor Service</h1>
-      <div class="status-tag">
-        <span id="statusDot" class="status-dot"></span>
-        <span id="statusText">desconectado</span>
-      </div>
-      <a class="manual-link" id="manualLink" href="#" target="_blank" rel="noopener">Manual ↗</a>
-    </div>
-  </header>
-
-  <main class="container">
-    <section class="card">
-      <div class="section-head">
-        <h2>1. Gerador de PDF Dinâmico</h2>
-        <div class="toolbar">
-          <select id="sampleSelect" class="select" aria-label="Selecionar exemplo de payload">
-            <option value="ficha">Exemplo: Ficha de cadastro</option>
-            <option value="status">Exemplo: Status de projeto</option>
-            <option value="widgets">Exemplo: Formulário Interativo</option>
-          </select>
-          <button id="btnLoadSample" class="chip">Carregar Exemplo</button>
-          <button id="btnBeautify" class="chip">Formatar JSON</button>
-          <button id="btnValidate" class="chip">Validar JSON</button>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand" aria-label="File Processor Service">
+          <div class="logo" aria-hidden="true">📄</div>
+          <div>
+            <div>File Processor Service</div>
+            <div class="sub">Gerador de PDF · Extração de texto</div>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="status-tag" title="Status da API">
+            <span id="statusDot" class="status-dot" aria-hidden="true"></span>
+            <span id="statusText">testando...</span>
+          </div>
+          <a id="manualLink" class="btn btn-ghost" href="#" target="_blank" rel="noopener">Manual ↗</a>
         </div>
       </div>
-      
-      <div class="workspace">
-        <div class="grid-2">
-          <div>
-            <label for="payload">Payload JSON (Editor)</label>
-            <textarea id="payload" spellcheck="false" rows="15"></textarea>
+    </header>
 
-            <div id="snippets" class="chips">
-              <span class="chips-title">Adicionar Bloco:</span>
-              <button class="chip" data-snippet="heading">+ Título</button>
-              <button class="chip" data-snippet="subheading">+ Subtítulo</button>
-              <button class="chip" data-snippet="paragraph">+ Parágrafo</button>
-              <button class="chip" data-snippet="bullets">+ Lista</button>
-              <button class="chip" data-snippet="keyValue">+ Chave/Valor</button>
-              <button class="chip" data-snippet="spacer">+ Espaço</button>
-              <button class="chip" data-snippet="image">+ Imagem</button>
-              <button class="chip" data-snippet="input">+ Form Input</button>
-              <button class="chip" data-snippet="checklist">+ Checklist</button>
-              <button class="chip" data-snippet="radio">+ Rádio</button>
+    <aside class="sidebar">
+      <nav class="nav" aria-label="Navegação principal">
+        <h3>Fluxo</h3>
+        <a href="#sec-pdf" class="active">1) Gerar PDF</a>
+        <a href="#sec-extract">2) Extrair Texto</a>
+        <a href="#sec-tools">3) Ferramentas</a>
+        <h3>Atalhos</h3>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin: 0 6px 6px">
+          <span class="kbd">Ctrl + Enter</span><span class="sub">Gerar PDF</span>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin: 0 6px 6px">
+          <span class="kbd">Alt + B</span><span class="sub">Formatar JSON</span>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin: 0 6px 6px">
+          <span class="kbd">Alt + V</span><span class="sub">Validar JSON</span>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <section id="sec-pdf" class="card" aria-labelledby="title-pdf">
+        <div class="section-head">
+          <h2 id="title-pdf">1. Gerador de PDF Dinâmico</h2>
+          <div class="toolbar">
+            <label class="visually-hidden" for="sampleSelect">Selecionar exemplo</label>
+            <select id="sampleSelect" aria-label="Selecionar exemplo de payload">
+              <option value="ficha">Exemplo: Ficha de cadastro</option>
+              <option value="status">Exemplo: Status de projeto</option>
+              <option value="widgets">Exemplo: Formulário Interativo</option>
+            </select>
+            <button id="btnLoadSample" class="chip" type="button">Carregar</button>
+            <button id="btnBeautify" class="chip" type="button">Formatar JSON</button>
+            <button id="btnValidate" class="chip" type="button">Validar JSON</button>
+          </div>
+        </div>
+        <div class="workspace">
+          <div class="grid-2">
+            <div>
+              <label for="payload">Payload JSON (Editor)</label>
+              <textarea id="payload" spellcheck="false" rows="16" aria-describedby="payloadHelp"></textarea>
+              <div id="payloadHelp" class="sub" style="margin-top:6px">Dica: arraste um arquivo .json para preencher este editor.</div>
+
+              <div id="snippets" class="chips" aria-label="Blocos rápidos">
+                <span class="chips-title">Adicionar bloco:</span>
+                <button class="chip" data-snippet="heading"    type="button">+ Título</button>
+                <button class="chip" data-snippet="subheading" type="button">+ Subtítulo</button>
+                <button class="chip" data-snippet="paragraph"  type="button">+ Parágrafo</button>
+                <button class="chip" data-snippet="bullets"    type="button">+ Lista</button>
+                <button class="chip" data-snippet="keyValue"   type="button">+ Chave/Valor</button>
+                <button class="chip" data-snippet="spacer"     type="button">+ Espaço</button>
+                <button class="chip" data-snippet="image"      type="button">+ Imagem</button>
+                <button class="chip" data-snippet="input"      type="button">+ Form Input</button>
+                <button class="chip" data-snippet="checklist"  type="button">+ Checklist</button>
+                <button class="chip" data-snippet="radio"      type="button">+ Rádio</button>
+              </div>
+            </div>
+
+            <div>
+              <label>Ações</label>
+              <div class="button-group">
+                <button class="btn btn-primary" id="btnCreate" type="button" title="Ctrl+Enter">Gerar e Baixar PDF</button>
+                <button class="btn btn-ghost" id="btnPreview" type="button">Abrir no Navegador</button>
+              </div>
+              <div id="diag" class="sub" style="margin-top:10px" aria-live="polite"></div>
+
+              <div class="dropzone" id="drop-json" style="margin-top:16px">
+                Solte um <strong>.json</strong> aqui para carregar no editor
+              </div>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div class="actions-column">
-            <div class="action-group">
-              <label>Ações Principais</label>
-              <button class="primary-btn" id="btnCreate">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Gerar e Baixar PDF
-              </button>
-              <button class="primary-btn ghost" id="btnPreview">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                Abrir no Navegador
-              </button>
+      <section id="sec-extract" class="card" aria-labelledby="title-extract">
+        <div class="section-head">
+          <h2 id="title-extract">2. Extrair Texto de Arquivos</h2>
+        </div>
+        <div class="workspace">
+          <div class="grid-2">
+            <div>
+              <label for="file">Selecione o arquivo (.pdf, .docx, .xlsx, .txt)</label>
+              <div class="file-input-wrapper">
+                <input type="file" id="file" />
+                <label for="file" class="file-input-label">
+                  📎 <span id="fileName">Escolher arquivo...</span>
+                </label>
+                <button id="btnExtractJson" type="button">Extrair JSON</button>
+                <button class="btnExtractTxtStyle" id="btnExtractTxt" type="button">Baixar .TXT</button>
+              </div>
+
+              <div class="dropzone" id="drop-file" style="margin-top:12px">
+                Solte um arquivo aqui para preencher automaticamente
+              </div>
             </div>
-            
-            <div class="action-group">
-              <label for="imgFile">Ferramenta: Imagem para Base64</label>
+            <div>
+              <label for="out">Resultado da Extração (JSON)</label>
+              <pre id="out" class="viewer" placeholder="Aguardando extração..."></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="sec-tools" class="card" aria-labelledby="title-tools">
+        <div class="section-head">
+          <h2 id="title-tools">3. Ferramentas Rápidas</h2>
+        </div>
+        <div class="workspace">
+          <div class="grid-2">
+            <div>
+              <label for="imgFile">Imagem → Base64</label>
               <div class="file-input-wrapper">
                 <input type="file" id="imgFile" accept="image/*" />
-                <label for="imgFile" class="file-input-label">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.2 15c.7-1.2 1-2.5.7-3.9-.6-2.4-2.4-4.2-4.8-4.8-.9-.2-1.8-.3-2.7 0-1.2.3-2.3.8-3.3 1.5-1 1-1.8 2-2.3 3.1-.6 1.3-.6 2.7 0 4s.9 2.4 2 3.2c1.2.8 2.5 1.1 3.8 1 .9-.1 1.8-.3 2.7-.7 1.1-.5 2.1-1.2 3-2.2.5-.5.9-1.1 1.2-1.8.2-.7.3-1.5.3-2.2 0-.2 0-.3 0-.4Z"/><path d="m7 11 3 3 4-4"/></svg>
-                  <span id="imgFileName">Escolher arquivo...</span>
-                </label>
-                <button id="btnToBase64">Converter</button>
+                <label for="imgFile" class="file-input-label">🖼️ <span id="imgFileName">Escolher imagem...</span></label>
+                <button id="btnToBase64" type="button">Converter</button>
               </div>
-              <textarea id="b64Out" class="viewer small" placeholder="O Base64 aparecerá aqui..." readonly aria-label="Resultado da conversão para Base64"></textarea>
-              <div id="diag" class="diag" aria-live="polite"></div>
+              <div class="dropzone" id="drop-image" style="margin-top:12px">Solte uma imagem aqui para converter</div>
+            </div>
+            <div>
+              <label for="b64Out">Resultado (Data URL)</label>
+              <div class="button-group" style="margin-bottom:6px">
+                <button id="btnCopyB64" type="button">Copiar</button>
+                <button id="btnClearB64" type="button">Limpar</button>
+              </div>
+              <textarea id="b64Out" class="viewer" placeholder="O Base64 aparecerá aqui..." readonly aria-label="Resultado Base64"></textarea>
             </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </main>
+  </div>
 
-    <section class="card">
-      <div class="section-head">
-        <h2>2. Extrair Texto de Arquivos</h2>
-      </div>
-      <div class="workspace">
-        <div class="grid-2">
-          <div>
-            <label for="file">Selecione o arquivo (.pdf, .docx, etc.)</label>
-            <div class="file-input-wrapper">
-              <input type="file" id="file" />
-              <label for="file" class="file-input-label">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
-                <span id="fileName">Escolher arquivo...</span>
-              </label>
-            </div>
-            <div class="button-group">
-              <button id="btnExtractJson">Extrair como JSON</button>
-              <button id="btnExtractTxt">Baixar como .TXT</button>
-            </div>
-          </div>
-          <div>
-            <label for="out">Resultado da Extração (JSON)</label>
-            <pre id="out" class="viewer" placeholder="Aguardando extração..."></pre>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-  
-  <script defer src="/static/script.js"></script>
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+    const statusDot  = $('#statusDot');
+    const statusText = $('#statusText');
+    const manualLink = $('#manualLink');
+    const loader     = $('#loader');
+
+    const payloadEl  = $('#payload');
+    const sampleSel  = $('#sampleSelect');
+
+    const API_BASE_URL = '/api';
+
+    const showLoader = () => loader.style.display = 'flex';
+    const hideLoader = () => loader.style.display = 'none';
+
+    function showToast(message, type = 'info'){
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`; toast.textContent = message; document.body.appendChild(toast);
+      setTimeout(() => toast.classList.add('show'), 10);
+      setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 500); }, 3800);
+    }
+
+    function setStatus(ok, msg){
+      statusDot.className = 'status-dot';
+      if (ok === true) statusDot.classList.add('ok');
+      if (ok === false) statusDot.classList.add('err');
+      statusText.textContent = msg;
+    }
+
+    function downloadBlob(blob, filename){
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function handleApiError(resp){
+      let errorMsg = `HTTP ${resp.status}: ${resp.statusText}`;
+      try { const j = await resp.json(); errorMsg = j.detail || errorMsg } catch(_){}
+      throw new Error(errorMsg);
+    }
+
+    // ================= Ping =================
+    async function ping(){
+      manualLink.href = `${location.origin}${API_BASE_URL}/manual`;
+      setStatus(null, 'testando...');
+      try{
+        const r = await fetch(`${location.origin}${API_BASE_URL}/`);
+        if(!r.ok) throw new Error(r.statusText);
+        const j = await r.json();
+        setStatus(true, `online — v${j.version || 'N/D'}`);
+      }catch(e){ setStatus(false, 'falha na conexão'); console.error(e) }
+    }
+
+    const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAGElEQVR4nGP8z8Dwn4EIwESMolGF1FMIAD2cAhK2AyPVAAAAAElFTkSuQmCC';
+
+    const SAMPLES = {
+      ficha: {
+        filename: 'ficha_cadastro_styled',
+        title: 'Ficha de Cadastro',
+        options: { page_numbers: true, margins_mm: [18,16,18], title_align: 'L', theme_text_color: [33,37,41] },
+        content_blocks: [
+          { type: 'heading', content: 'Dados do Cliente', style: { background_color: [224,238,255] }, line_height: 9 },
+          { type: 'form_input', content: { label: 'Nome completo', width_mm: 140, lines: 1, boxed: false } },
+          { type: 'form_input', content: { label: 'Endereço', width_mm: 140, lines: 2, boxed: true } },
+          { type: 'subheading', content: 'Preferências', style: { background_color: [245,247,250] }, line_height: 7.5 },
+          { type: 'form_checklist', content: { label: 'Canais de contato', options: ['E-mail','WhatsApp','Telefone','SMS'], columns: 2, box_size_mm: 4, gap_mm: 2 }},
+          { type: 'form_radiogroup', content: { label: 'Plano', options: ['Básico','Pro','Enterprise'], columns: 3, dot_size_mm: 4, gap_mm: 2 }},
+          { type: 'heading', content: 'Observações', style: { background_color: [224,238,255] }, line_height: 9 },
+          { type: 'form_input', content: { label: '', width_mm: 140, lines: 3, boxed: true } },
+          { type: 'subheading', content: 'Consentimento', style: { background_color: [245,247,250] }, line_height: 7.5 },
+          { type: 'paragraph', content: 'Declaro que as informações prestadas são verdadeiras e autorizo o uso dos dados para fins de atendimento.' },
+          { type: 'spacer', content: 6 },
+          { type: 'form_input', content: { label: 'Assinatura', width_mm: 90, lines: 1, boxed: false } },
+          { type: 'form_input', content: { label: 'Data', width_mm: 60, lines: 1, boxed: false } }
+        ]
+      },
+      status: {
+        filename: 'status_projeto_styled',
+        title: 'Status do Projeto — Sprint 12',
+        options: { author: 'Equipe XPTO', subject: 'Status Sprint', keywords: 'status, sprint, relatório', page_numbers: true, margins_mm: [18,16,18], title_align: 'L', theme_text_color: [33,37,41] },
+        content_blocks: [
+          { type: 'heading', content: 'Resumo', style: { background_color: [232,244,248] }, line_height: 9 },
+          { type: 'paragraph', content: 'Nesta sprint foram entregues integrações com o gateway de pagamentos e o módulo de relatórios. Desempenho estável.' },
+          { type: 'subheading', content: 'Entregas', style: { background_color: [245,247,250] }, line_height: 7.5 },
+          { type: 'bullet_list', content: ['Integração com PagBank finalizada','Relatórios CSV: exportação e filtros','Correção do leak de memória no worker'] },
+          { type: 'subheading', content: 'Riscos & Ações', style: { background_color: [245,247,250] }, line_height: 7.5 },
+          { type: 'bullet_list', content: ['Fila de e-mails crescendo — ação: retry exponencial','Dependência da equipe de Dados — ação: alinhar DRI até sexta'] },
+          { type: 'spacer', content: 6 },
+          { type: 'key_value', style: { background_color: [248,249,250] }, content: { 'Projeto':'XPTO', 'Versão':'1.8.2', 'Data':'____/____/______' }},
+          { type: 'image', content: { base64_data: TINY_PNG, width: 80, align: 'C' } }
+        ]
+      },
+      widgets: {
+        filename: 'form_interativo_demo',
+        title: 'Formulário Interativo (AcroForm)',
+        options: { page_numbers: true, margins_mm: [18,16,18], title_align: 'L' },
+        content_blocks: [
+          { type: 'heading', content: 'Preencha os campos abaixo', style: { background_color: [232,244,248] }, line_height: 9 },
+          { type: 'paragraph', content: 'Campos editáveis: Nome, E-mail. Marque o aceite e escolha um plano.' },
+          { type: 'spacer', content: 4 }
+        ],
+        widgets: [
+          { type: 'text', name: 'nome', page: 1, x_mm: 20, y_mm: 60, w_mm: 120, h_mm: 8, value: '', font_size: 10, required: true },
+          { type: 'text', name: 'email', page: 1, x_mm: 20, y_mm: 72, w_mm: 120, h_mm: 8, value: '', font_size: 10 },
+          { type: 'checkbox', name: 'aceite_lgpd', page: 1, x_mm: 20, y_mm: 86, w_mm: 6, h_mm: 6, checked: false },
+          { type: 'radio', name: 'plano', page: 1, x_mm: 20, y_mm: 100, w_mm: 6, h_mm: 6, export_value: 'Basico' },
+          { type: 'radio', name: 'plano', page: 1, x_mm: 60, y_mm: 100, w_mm: 6, h_mm: 6, export_value: 'Pro' },
+          { type: 'radio', name: 'plano', page: 1, x_mm: 100, y_mm: 100, w_mm: 6, h_mm: 6, export_value: 'Enterprise' },
+          { type: 'signature', name: 'assinatura', page: 1, x_mm: 20, y_mm: 120, w_mm: 60, h_mm: 12 }
+        ]
+      }
+    };
+
+    function loadSample(key){
+      const selected = key || (sampleSel ? sampleSel.value : 'ficha');
+      const tpl = SAMPLES[selected];
+      if(!tpl) return showToast('Exemplo não encontrado.', 'error');
+      const obj = JSON.parse(JSON.stringify(tpl));
+      payloadEl.value = JSON.stringify(obj, null, 2);
+      try{ localStorage.setItem('fps_payload', payloadEl.value) }catch(_){ }
+    }
+
+    const SNIPPETS = {
+      heading:    { type: 'heading',    content: 'Título da Seção', style:{ background_color:[224,238,255] }, line_height:9 },
+      subheading: { type: 'subheading', content: 'Subtítulo',       style:{ background_color:[245,247,250] }, line_height:7.5 },
+      paragraph:  { type: 'paragraph',  content: 'Texto do parágrafo aqui.' },
+      bullets:    { type: 'bullet_list', content: ['Item 1','Item 2'] },
+      keyValue:   { type: 'key_value',  content: { 'Chave':'Valor', 'Versão':'1.0.0' } },
+      spacer:     { type: 'spacer',     content: 6 },
+      image:      { type: 'image',      content: { base64_data: TINY_PNG, width: 50, align: 'C' } },
+      input:      { type: 'form_input', content: { label: 'Campo', width_mm: 120, lines: 1, boxed: false } },
+      checklist:  { type: 'form_checklist', content: { label: 'Checklist', options: ['A','B','C'], columns: 2, box_size_mm: 4, gap_mm: 2 } },
+      radio:      { type: 'form_radiogroup', content: { label: 'Opções', options: ['Opção 1','Opção 2'], columns: 2, dot_size_mm: 4, gap_mm: 2 } },
+    };
+
+    function pushSnippet(snippet){
+      try{
+        const data = JSON.parse(payloadEl.value || '{}');
+        if(!Array.isArray(data.content_blocks)) throw new Error('payload não possui "content_blocks"');
+        data.content_blocks.push(snippet);
+        payloadEl.value = JSON.stringify(data, null, 2);
+        try{ localStorage.setItem('fps_payload', payloadEl.value) }catch(_){ }
+      }catch(e){ showToast('JSON inválido – não foi possível adicionar o bloco.', 'error') }
+    }
+
+    const snippetsEl = document.getElementById('snippets');
+    snippetsEl.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-snippet]');
+      if(!btn) return;
+      const key = btn.getAttribute('data-snippet');
+      const sn = SNIPPETS[key];
+      if(sn) pushSnippet(sn);
+    });
+
+    document.getElementById('btnBeautify').addEventListener('click', () => {
+      try{ payloadEl.value = JSON.stringify(JSON.parse(payloadEl.value), null, 2); showToast('JSON formatado.', 'success') }
+      catch{ showToast('JSON inválido.', 'error') }
+    });
+    document.getElementById('btnValidate').addEventListener('click', () => {
+      try{ JSON.parse(payloadEl.value); showToast('JSON válido.', 'success') }
+      catch(e){ showToast(`Inválido: ${e.message}`, 'error') }
+    });
+
+    const saved = (() => { try{ return localStorage.getItem('fps_payload') } catch(_){ return null } })();
+    if(saved){ payloadEl.value = saved } else { loadSample('ficha') }
+    sampleSel.addEventListener('change', () => loadSample());
+    document.getElementById('btnLoadSample').addEventListener('click', () => loadSample());
+    payloadEl.addEventListener('input', () => { try{ localStorage.setItem('fps_payload', payloadEl.value) }catch(_){} });
+
+    async function createPdf(downloadMode){
+      document.getElementById('diag').textContent = '';
+      showLoader();
+      try{
+        let data; try{ data = JSON.parse(payloadEl.value) } catch{ throw new Error('O JSON no editor é inválido.') }
+        const resp = await fetch(`${API_BASE_URL}/create-pdf?download=${downloadMode ? 'true':'false'}`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(data) });
+        if(!resp.ok) await handleApiError(resp);
+        const ws = resp.headers.get('X-Widgets-Supported');
+        const wi = resp.headers.get('X-Widgets-Injected');
+        const wk = resp.headers.get('X-Widgets-Skipped');
+        const diag = [ ws && `Widgets Supported: ${ws}`, wi && `Widgets Injected: ${wi}`, wk && `Widgets Skipped: ${wk}` ].filter(Boolean).join(' • ');
+        if(diag) { document.getElementById('diag').textContent = diag; showToast(diag, 'info') }
+        const blob = await resp.blob();
+        const filename = (data.filename || 'documento') + '.pdf';
+        if(downloadMode){ downloadBlob(blob, filename) }
+        else { const url = URL.createObjectURL(blob); window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 10000) }
+        showToast('PDF gerado com sucesso!', 'success');
+      }catch(e){ console.error(e); showToast(`Erro: ${e.message}`, 'error') }
+      finally{ hideLoader() }
+    }
+    document.getElementById('btnCreate').addEventListener('click', () => createPdf(true));
+    document.getElementById('btnPreview').addEventListener('click', () => createPdf(false));
+
+    // Atalhos de teclado
+    document.addEventListener('keydown', (e) => {
+      if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); createPdf(true) }
+      if(e.altKey && (e.key.toLowerCase() === 'b')){ e.preventDefault(); document.getElementById('btnBeautify').click() }
+      if(e.altKey && (e.key.toLowerCase() === 'v')){ e.preventDefault(); document.getElementById('btnValidate').click() }
+    });
+
+    function updateFileName(el, labelSel){ const span = $(labelSel); if(!span) return; span.textContent = el.files && el.files[0] ? el.files[0].name : 'Escolher arquivo...' }
+    document.getElementById('file').addEventListener('change', (e) => updateFileName(e.target, '#fileName'));
+    document.getElementById('imgFile').addEventListener('change', (e) => updateFileName(e.target, '#imgFileName'));
+
+    async function extractText(returnAs){
+      const fileInput = document.getElementById('file');
+      if(!fileInput.files.length){ showToast('Escolha um arquivo.', 'info'); return }
+      showLoader(); document.getElementById('out').textContent = '';
+      try{
+        const file = fileInput.files[0];
+        const formData = new FormData(); formData.append('file', file, file.name);
+        const download = returnAs === 'txt';
+        const url = `${API_BASE_URL}/process-file?return_as=${returnAs}&download=${download}`;
+        const response = await fetch(url, { method:'POST', body: formData });
+        if(!response.ok) await handleApiError(response);
+        if(returnAs === 'json'){
+          const result = await response.json();
+          document.getElementById('out').textContent = JSON.stringify(result, null, 2);
+          showToast('Texto extraído com sucesso!', 'success');
+        }else{
+          const blob = await response.blob();
+          const filename = (file.name.replace(/\.[^/.]+$/, '') || 'texto') + '.txt';
+          downloadBlob(blob, filename);
+          showToast('.TXT gerado!', 'success');
+        }
+      }catch(e){ console.error(e); document.getElementById('out').textContent = `Erro: ${e.message}`; showToast(`Erro: ${e.message}`, 'error') }
+      finally{ hideLoader() }
+    }
+
+    document.getElementById('btnExtractJson').addEventListener('click', () => extractText('json'));
+    document.getElementById('btnExtractTxt').addEventListener('click', () => extractText('txt'));
+    document.getElementById('btnToBase64').addEventListener('click', () => {
+      const file = document.getElementById('imgFile').files[0];
+      if(!file){ showToast('Escolha uma imagem.', 'info'); return }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const val = e.target.result;
+        const out = document.getElementById('b64Out');
+        out.value = val; showToast('Imagem convertida para Base64!', 'success');
+      };
+      reader.onerror = () => showToast('Falha ao ler o arquivo.', 'error');
+      reader.readAsDataURL(file);
+    });
+    document.getElementById('btnCopyB64').addEventListener('click', () => {
+      const out = document.getElementById('b64Out');
+      out.select(); document.execCommand('copy'); showToast('Copiado!', 'info');
+    });
+    document.getElementById('btnClearB64').addEventListener('click', () => { document.getElementById('b64Out').value = '' });
+
+    function useDropZone(id, onDrop){
+      const dz = document.getElementById(id); if(!dz) return;
+      ['dragenter','dragover'].forEach(evt => dz.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover') }));
+      ['dragleave','drop'].forEach(evt => dz.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover') }));
+      dz.addEventListener('drop', (e) => onDrop(e));
+    }
+
+    useDropZone('drop-json', (e) => {
+      const file = e.dataTransfer.files && e.dataTransfer.files[0]; if(!file) return;
+      if(!file.name.toLowerCase().endsWith('.json')){ showToast('Apenas .json aqui.', 'info'); return }
+      const reader = new FileReader();
+      reader.onload = (ev) => { payloadEl.value = ev.target.result; try{ localStorage.setItem('fps_payload', payloadEl.value) }catch(_){}; showToast('Payload carregado!', 'success') };
+      reader.onerror = () => showToast('Falha ao ler o arquivo.', 'error');
+      reader.readAsText(file, 'utf-8');
+    });
+
+    useDropZone('drop-file', (e) => {
+      const file = e.dataTransfer.files && e.dataTransfer.files[0]; if(!file) return;
+      const input = document.getElementById('file');
+      const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files;
+      updateFileName(input, '#fileName'); showToast('Arquivo pronto para extração.', 'info');
+    });
+
+    useDropZone('drop-image', (e) => {
+      const file = e.dataTransfer.files && e.dataTransfer.files[0]; if(!file) return;
+      if(!file.type.startsWith('image/')){ showToast('Solte uma imagem válida.', 'info'); return }
+      const input = document.getElementById('imgFile');
+      const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files;
+      updateFileName(input, '#imgFileName');
+      document.getElementById('btnToBase64').click();
+    });
+
+    ping();
+  </script>
 </body>
 </html>
