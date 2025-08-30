@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+PyMuPDF
+python-docx
+openpyxl
+fpdf2>=2.7.0
+requests
+pillow
+markdown
